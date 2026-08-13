@@ -185,12 +185,23 @@ let coins = 0;
 let playerName = 'Player';
 
 const WEAPONS = [
-  { id:'pistol',  name:'Pistol',          desc:'Standard sidearm', price:0,   tier:'regular', owned:true },
-  { id:'rifle',   name:'Assault Rifle',   desc:'Rapid fire',       price:15,  tier:'regular', owned:false },
-  { id:'laser',   name:'Laser Gun',       desc:'High damage beam', price:50,  tier:'regular', owned:false },
-  { id:'rainbow', name:'Rainbow Blaster', desc:'Colorful chaos',   price:150, tier:'special', owned:false },
-  { id:'midas',   name:'Midas Touch',     desc:'Turns kills to coins', price:200, tier:'special', owned:false },
+  { id:'pistol',  name:'Pistol',          tier:'regular', price:0,   owned:true,  level:0, maxLevel:2,
+    upgradeCost:[10,25], baseCooldown:18, baseRange:260, rangeStep:90, baseDamage:1, dmgStep:1,
+    desc:'Starter sidearm. Aim for the head for a one-shot kill, or the legs to stagger them.' },
+  { id:'rifle',   name:'Assault Rifle',   tier:'regular', price:15,  owned:false, level:0, maxLevel:2,
+    upgradeCost:[30,50], baseCooldown:8, baseRange:220, rangeStep:80, baseDamage:1, dmgStep:1,
+    desc:'Rapid fire to suppress a crowd pressing in from above.' },
+  { id:'laser',   name:'Laser Gun',       tier:'regular', price:50,  owned:false, level:0, maxLevel:2,
+    upgradeCost:[70,95], baseCooldown:16, baseRange:420, rangeStep:220, baseDamage:2, dmgStep:1, pierce:true,
+    desc:'Instant beam that pierces every enemy in its path.' },
+  { id:'rainbow', name:'Rainbow Blaster', tier:'special', price:150, owned:false, level:0, maxLevel:0,
+    baseCooldown:20, baseRange:400, baseDamage:2,
+    desc:'Turns whoever it hits rainbow-colored and wobbling.' },
+  { id:'midas',   name:'Midas Touch',     tier:'special', price:200, owned:false, level:0, maxLevel:0,
+    baseCooldown:20, baseRange:400, baseDamage:2,
+    desc:'Any hit, anywhere, turns the enemy straight into coins.' },
 ];
+function weaponById(id){ return WEAPONS.find(w=>w.id===id); }
 let equippedWeapon = 'pistol';
 
 function updateCoinDisplays(){
@@ -214,23 +225,44 @@ function renderShop(){
       img.src = spriteData[w.id];
       const info = document.createElement('div');
       info.className = 'shop-row-info';
-      info.innerHTML = '<div class="name">'+w.name+'</div><div class="desc">'+w.desc+'</div>';
-      const btn = document.createElement('button');
-      if (equippedWeapon===w.id){
-        btn.className = 'shop-row-btn equipped'; btn.textContent = 'EQUIPPED';
-      } else if (w.owned){
-        btn.className = 'shop-row-btn equip'; btn.textContent = 'EQUIP';
-        btn.onclick = ()=>{ equippedWeapon = w.id; renderShop(); };
-      } else {
-        btn.className = 'shop-row-btn buy' + (coins<w.price ? ' disabled' : '');
-        btn.textContent = '$'+w.price;
-        btn.onclick = ()=>{
+      const lvlBadge = w.maxLevel>0 ? ' <span style="color:#9a9aa2;font-weight:normal;">Lv.'+w.level+'/'+w.maxLevel+'</span>' : '';
+      info.innerHTML = '<div class="name">'+w.name+lvlBadge+'</div><div class="desc">'+w.desc+'</div>';
+      const btnWrap = document.createElement('div');
+      btnWrap.style.display = 'flex'; btnWrap.style.flexDirection = 'column'; btnWrap.style.gap = '6px';
+
+      if (!w.owned){
+        const buyBtn = document.createElement('button');
+        buyBtn.className = 'shop-row-btn buy' + (coins<w.price ? ' disabled' : '');
+        buyBtn.textContent = w.price===0 ? 'FREE' : '$'+w.price;
+        buyBtn.onclick = ()=>{
           if (coins < w.price) return;
           coins -= w.price; w.owned = true; equippedWeapon = w.id;
           updateCoinDisplays(); renderShop();
         };
+        btnWrap.appendChild(buyBtn);
+      } else {
+        const eqBtn = document.createElement('button');
+        if (equippedWeapon===w.id){
+          eqBtn.className = 'shop-row-btn equipped'; eqBtn.textContent = 'EQUIPPED';
+        } else {
+          eqBtn.className = 'shop-row-btn equip'; eqBtn.textContent = 'EQUIP';
+          eqBtn.onclick = ()=>{ equippedWeapon = w.id; renderShop(); };
+        }
+        btnWrap.appendChild(eqBtn);
+        if (w.level < w.maxLevel){
+          const cost = w.upgradeCost[w.level];
+          const ugBtn = document.createElement('button');
+          ugBtn.className = 'shop-row-btn buy' + (coins<cost ? ' disabled' : '');
+          ugBtn.textContent = 'UG'+(w.level+1)+' $'+cost;
+          ugBtn.onclick = ()=>{
+            if (coins < cost) return;
+            coins -= cost; w.level++;
+            updateCoinDisplays(); renderShop();
+          };
+          btnWrap.appendChild(ugBtn);
+        }
       }
-      row.appendChild(img); row.appendChild(info); row.appendChild(btn);
+      row.appendChild(img); row.appendChild(info); row.appendChild(btnWrap);
       list.appendChild(row);
     });
   });
@@ -357,7 +389,7 @@ function renderHP(){
 }
 
 function spawnEnemyOn(p){
-  enemies.push({ x: p.x + p.w/2, y: p.y - 46, w:30, h:46, alive:true, shootTimer: 60+Math.random()*90, aimDir:1, hitFlash:0, dying:0 });
+  enemies.push({ x: p.x + p.w/2, y: p.y - 46, w:30, h:46, alive:true, shootTimer: 60+Math.random()*90, aimDir:1, hitFlash:0, dying:0, dyingColorful:false, hp:2, staggerTimer:0 });
 }
 
 function startGame(){
@@ -373,7 +405,7 @@ function startGame(){
   platforms.push({x:0, y:0, w:130, h:22});
   genPlatforms(0, -4000);
 
-  player = { x:65, y:-70, w:56, h:70, vx:0, vy:0, onGround:true, facing:1, animTimer:0, animFrame:0, state:'stand', aimAngle:0 };
+  player = { x:65, y:-70, w:56, h:70, vx:0, vy:0, onGround:true, facing:1, animTimer:0, animFrame:0, state:'stand', aimAngle:0, shootCooldown:0 };
   cameraX = player.x + player.w/2 - innerWidth/2;
   cameraY = player.y - innerHeight*0.6;
   maxHeightReached = 0;
@@ -434,21 +466,54 @@ addEventListener('keyup', e=>{
 
 // ---------- Shooting ----------
 const shootZone = document.getElementById('shoot-zone');
+
+function damageEnemy(en, dmg, hitZone, weaponId){
+  if (!en.alive || en.dying>0) return;
+  if (weaponId === 'midas'){ en.dying=14; coins+=5; updateCoinDisplays(); return; }
+  if (weaponId === 'rainbow'){ en.dying=22; en.dyingColorful=true; return; }
+  if (hitZone === 'leg'){ en.staggerTimer = 90; return; }
+  if (hitZone === 'head'){ en.dying = 14; return; }
+  en.hp -= dmg;
+  if (en.hp <= 0) en.dying = 14;
+}
+
 function fireBullet(clientX, clientY){
   if (!player || gameOver) return;
+  if (player.shootCooldown > 0) return;
+  const weapon = weaponById(equippedWeapon);
+  player.shootCooldown = weapon.baseCooldown;
+
   const worldTapX = clientX + cameraX;
   const worldTapY = clientY + cameraY;
   const originX2 = player.x + player.w/2, originY2 = player.y + player.h*0.55;
   const dx = worldTapX - originX2, dy = worldTapY - originY2;
   const dist = Math.hypot(dx,dy) || 1;
-  const vx = dx/dist*BULLET_SPEED, vy = dy/dist*BULLET_SPEED;
   player.aimAngle = Math.atan2(dy,dx);
   player.aimDX = dx; player.aimDY = dy;
   player.facing = dx < 0 ? 1 : -1;
   const vertRatio = Math.abs(dy)/dist;
   player.shootPose = vertRatio > 0.6 ? (dy < 0 ? 'shoot_up' : 'land') : 'shoot_straight';
   player.shootTimer = 14;
-  bullets.push({ x:originX2, y:originY2, vx, vy, owner:'player', life:90 });
+
+  const dmg = weapon.baseDamage + (weapon.dmgStep||0)*weapon.level;
+  const range = weapon.baseRange + (weapon.rangeStep||0)*weapon.level;
+
+  if (weapon.pierce){
+    const ux = dx/dist, uy = dy/dist;
+    for (const en of enemies){
+      if (!en.alive || en.dying>0) continue;
+      const ex = en.x - originX2, ey = (en.y - en.h*0.5) - originY2;
+      const along = ex*ux + ey*uy;
+      if (along < 0 || along > range) continue;
+      const perp = Math.abs(ex*uy - ey*ux);
+      if (perp < 26) damageEnemy(en, dmg, 'body', weapon.id);
+    }
+    bullets.push({ laser:true, x1:originX2, y1:originY2, x2:originX2+ux*range, y2:originY2+uy*range, life:8, owner:'player' });
+  } else {
+    const vx = dx/dist*BULLET_SPEED, vy = dy/dist*BULLET_SPEED;
+    const life = Math.round(range/BULLET_SPEED);
+    bullets.push({ x:originX2, y:originY2, vx, vy, owner:'player', life, dmg, weapon:weapon.id });
+  }
 }
 shootZone.addEventListener('pointerdown', e=>{ fireBullet(e.clientX, e.clientY); });
 
@@ -522,17 +587,20 @@ function update(){
 
   player.animTimer++;
   if (player.shootTimer > 0) player.shootTimer--;
+  if (player.shootCooldown > 0) player.shootCooldown--;
   if (!player.onGround){ player.state = player.vy < 0 ? 'jump1' : 'jump2'; }
   else if (Math.abs(player.vx) > 0.3){ player.state='walk'; if(player.animTimer>7){player.animFrame=(player.animFrame+1)%3; player.animTimer=0;} }
   else { player.state='stand'; }
 
-  for (const b of bullets){ b.x += b.vx; b.y += b.vy; b.life--; }
+  for (const b of bullets){ if (!b.laser){ b.x += b.vx; b.y += b.vy; } b.life--; }
   bullets = bullets.filter(b => b.life > 0);
 
   for (const en of enemies){
     if (!en.alive) continue;
     if (en.dying > 0){ en.dying--; if (en.dying<=0) en.alive=false; continue; }
+    if (en.staggerTimer > 0) en.staggerTimer--;
     if (en.y - cameraY < -100 || en.y - cameraY > innerHeight+100) continue;
+    if (en.staggerTimer > 0) continue;
     en.shootTimer--;
     if (en.shootTimer <= 0){
       en.shootTimer = 100 + Math.random()*80;
@@ -547,13 +615,15 @@ function update(){
   if (invulnTimer > 0) invulnTimer--;
 
   for (const b of bullets){
-    if (b.life <= 0) continue;
+    if (b.life <= 0 || b.laser) continue;
     if (b.owner === 'player'){
       for (const en of enemies){
         if (!en.alive || en.dying>0) continue;
         if (Math.abs(b.x - en.x) < en.w*0.6 && Math.abs(b.y - (en.y - en.h*0.5)) < en.h*0.6){
-          b.life = 0; en.dying = 14;
-          if (equippedWeapon === 'midas'){ coins += 5; updateCoinDisplays(); }
+          b.life = 0;
+          const headY = en.y - en.h, feetY = en.y;
+          const zone = b.y < headY+16 ? 'head' : (b.y > feetY-14 ? 'leg' : 'body');
+          damageEnemy(en, b.dmg||1, zone, b.weapon);
         }
       }
     } else if (b.owner === 'enemy'){
@@ -633,9 +703,20 @@ function drawEnemies(){
     if (!en.alive) continue;
     const ey = en.y - cameraY, cx = en.x - cameraX;
     if (ey < -80 || ey > innerHeight+80) continue;
-    const feetY = ey, headY = ey - en.h;
-    const bodyColor = en.dying > 0 ? '#e0453f' : '#ffffff';
+    const feetY = ey, headYbase = ey - en.h;
+    const wobble = en.staggerTimer>0 ? Math.sin(en.staggerTimer*0.9)*6 : 0;
+    const headY = headYbase;
+    let bodyColor = '#ffffff';
+    if (en.dying > 0){
+      bodyColor = en.dyingColorful
+        ? ['#e0453f','#f2a93b','#f2e23b','#4bcf5f','#3f8ff2','#9d5ce0'][Math.floor(en.dying/2)%6]
+        : '#e0453f';
+    } else if (en.staggerTimer > 0){
+      bodyColor = '#f2a93b';
+    }
     const outline = '#2c2c2e';
+    ctx.save();
+    ctx.translate(wobble, 0);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
     ctx.strokeStyle = outline; ctx.lineWidth = 5.5;
@@ -658,11 +739,18 @@ function drawEnemies(){
 
     ctx.strokeStyle = '#c8862a'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(cx+armDir*13, headY+16, 11, Math.PI*0.5*armDir-(armDir>0?0.55:2.6), Math.PI*0.5*armDir+(armDir>0?0.55:-2.6)); ctx.stroke();
+    ctx.restore();
   }
 }
 
 function drawBullets(){
   for (const b of bullets){
+    if (b.laser){
+      ctx.strokeStyle = 'rgba(160,120,255,'+(b.life/8)+')';
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(b.x1-cameraX,b.y1-cameraY); ctx.lineTo(b.x2-cameraX,b.y2-cameraY); ctx.stroke();
+      continue;
+    }
     const sx = b.x-cameraX, sy = b.y-cameraY;
     ctx.fillStyle = b.owner==='player' ? '#3a3a40' : '#c0392b';
     ctx.beginPath(); ctx.arc(sx, sy, b.owner==='player'?4:5, 0, Math.PI*2); ctx.fill();
