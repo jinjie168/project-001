@@ -51,9 +51,10 @@
   #stick-nub { position:absolute; width:52px; height:52px; border-radius:50%; background:linear-gradient(180deg,#8a8a92,#6a6a72); border:2px solid #45454a; left:66px; bottom:66px; box-shadow:0 3px 6px rgba(0,0,0,0.3); }
   #stick-hint { position:absolute; left:32px; bottom:158px; color:#8a8a92; font-size:11px; }
   #shoot-zone { position:fixed; right:0; top:0; width:100vw; height:100vh; z-index:4; touch-action:none; }
-  #hp-row { position:fixed; top:60px; left:16px; display:flex; gap:5px; z-index:5; }
-  .hp-pip { width:16px; height:16px; border-radius:50%; background:#c0392b; border:2px solid #7a2016; }
-  .hp-pip.lost { background:#d5d5da; border-color:#9a9aa2; }
+  #hp-wrap { position:fixed; top:60px; left:16px; z-index:5; display:flex; align-items:center; gap:8px; }
+  #hp-row { width:110px; height:16px; background:#d5d5da; border:2px solid #9a9aa2; border-radius:9px; overflow:hidden; box-shadow:inset 0 2px 4px rgba(0,0,0,0.2); }
+  #hp-fill { height:100%; width:100%; background:linear-gradient(180deg,#e0645a,#c0392b); transition:width 0.2s ease; }
+  #hp-num { font-weight:bold; font-size:13px; color:#3a3a40; min-width:26px; }
 
   #pause-overlay { position:fixed; inset:0; background:rgba(30,30,34,0.9); z-index:40; display:none; flex-direction:row; flex-wrap:wrap; align-items:center; justify-content:center; gap:clamp(18px,6vw,36px); padding:20px; }
   .pause-menu-icon { width:clamp(56px,15vw,86px); height:clamp(56px,15vw,86px); }
@@ -134,7 +135,7 @@
   <div class="pill" id="height-pill"><div class="label">HEIGHT</div><div id="height-val">0m</div></div>
 </div>
 <div id="warn-pill">IN WATER!</div>
-<div id="hp-row"></div>
+<div id="hp-wrap"><div id="hp-row"><div id="hp-fill"></div></div><div id="hp-num">100</div></div>
 
 <div id="shoot-zone" style="display:none;"></div>
 <div id="joystick-zone" style="display:none;">
@@ -289,6 +290,9 @@ const WEAPONS = [
 function weaponById(id){ return WEAPONS.find(w=>w.id===id); }
 let equippedWeapon = 'pistol';
 let musicOn = true, sfxOn = true, controlSide = 'left';
+let regenLevel = 0;
+const REGEN_COST = [150, 350];
+const REGEN_INTERVAL = [90, 60, 45]; // frames at ~60fps: 1.5s, 1s, 0.75s
 let bestHeight = 0;
 
 // ---------- Save / Load ----------
@@ -296,7 +300,7 @@ const SAVE_KEY = 'texxell_skyward_save';
 function saveGame(){
   try{
     const data = {
-      coins, equippedWeapon, musicOn, sfxOn, controlSide, playerName, bestHeight,
+      coins, equippedWeapon, musicOn, sfxOn, controlSide, playerName, bestHeight, regenLevel,
       weapons: WEAPONS.map(w=>({id:w.id, owned:w.owned, level:w.level}))
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -308,6 +312,7 @@ function loadGame(){
     if (!raw) return false;
     const data = JSON.parse(raw);
     coins = data.coins||0;
+    regenLevel = data.regenLevel||0;
     equippedWeapon = data.equippedWeapon||'pistol';
     musicOn = data.musicOn !== false;
     sfxOn = data.sfxOn !== false;
@@ -426,6 +431,42 @@ function renderShop(){
       list.appendChild(row);
     });
   });
+
+  const upLabel = document.createElement('div');
+  upLabel.className = 'shop-section-label';
+  upLabel.textContent = 'UPGRADES';
+  list.appendChild(upLabel);
+
+  const regenRow = document.createElement('div');
+  regenRow.className = 'shop-row';
+  const regenIcon = document.createElement('div');
+  regenIcon.style.fontSize = '32px'; regenIcon.style.width = '48px'; regenIcon.style.textAlign = 'center';
+  regenIcon.textContent = '❤️';
+  const regenInfo = document.createElement('div');
+  regenInfo.className = 'shop-row-info';
+  const regenDesc = ['Regenerates health over time.', 'Heals noticeably faster.', 'Heals as fast as possible.'][regenLevel];
+  regenInfo.innerHTML = '<div class="name">HP Regen Speed <span style="color:#9a9aa2;font-weight:normal;">Lv.'+regenLevel+'/2</span></div><div class="desc">'+regenDesc+'</div>';
+  const regenBtnWrap = document.createElement('div');
+  regenBtnWrap.style.display = 'flex'; regenBtnWrap.style.flexDirection = 'column'; regenBtnWrap.style.gap = '6px';
+  if (regenLevel < 2){
+    const cost = REGEN_COST[regenLevel];
+    const btn = document.createElement('button');
+    btn.className = 'shop-row-btn buy' + (coins<cost ? ' disabled' : '');
+    btn.textContent = 'UG'+(regenLevel+1)+' $'+cost;
+    btn.onclick = ()=>{
+      if (coins < cost) return;
+      coins -= cost; regenLevel++;
+      updateCoinDisplays(); renderShop(); saveGame();
+    };
+    regenBtnWrap.appendChild(btn);
+  } else {
+    const maxed = document.createElement('button');
+    maxed.className = 'shop-row-btn equipped';
+    maxed.textContent = 'MAXED';
+    regenBtnWrap.appendChild(maxed);
+  }
+  regenRow.appendChild(regenIcon); regenRow.appendChild(regenInfo); regenRow.appendChild(regenBtnWrap);
+  list.appendChild(regenRow);
 }
 
 let shopReturnScreen = 'start-screen';
@@ -562,6 +603,10 @@ const MAX_GAP_Y = 135;
 const MIN_GAP_Y = 100;
 const BULLET_SPEED = 11;
 const ENEMY_BULLET_SPEED = 6;
+const WATER_SAFE_GAP = 340;       // world px behind the player when idle
+const WATER_CATCHUP_SECS = 16;    // seconds to fully close that gap if the player doesn't climb
+const WATER_CREEP_PER_FRAME = WATER_SAFE_GAP / (WATER_CATCHUP_SECS*60);
+const WATER_FOLLOW_SMOOTH = 0.03; // how gently water eases toward its target (lower = less noticeable)
 
 // ---------- World-space state ----------
 // Everything (player, platforms, enemies, bullets, water) lives in WORLD coordinates.
@@ -569,8 +614,8 @@ const ENEMY_BULLET_SPEED = 6;
 let platforms = [], enemies = [], bullets = [], mapCoins = [];
 let lastPlatformX = 0;
 let player, cameraX = 0, cameraY = 0, maxHeightReached = 0;
-let waterY = 0, waterTimer = 0, gameOver = false, running = false;
-let playerHP = 3, invulnTimer = 0, deathReason = '';
+let waterY = 0, waterGap = 300, waterTimer = 0, gameOver = false, running = false;
+let playerHP = 100, hpRegenTimer = 0, invulnTimer = 0, deathReason = '';
 
 let driftDir = 1;
 let stairGroupCounter = 0;
@@ -618,17 +663,14 @@ function genPlatforms(fromY, toY){
 }
 
 function renderHP(){
-  const row = document.getElementById('hp-row');
-  row.innerHTML = '';
-  for (let i=0;i<3;i++){
-    const d = document.createElement('div');
-    d.className = 'hp-pip' + (i>=playerHP ? ' lost' : '');
-    row.appendChild(d);
-  }
+  const fill = document.getElementById('hp-fill');
+  const num = document.getElementById('hp-num');
+  fill.style.width = Math.max(0,playerHP) + '%';
+  num.textContent = Math.max(0,Math.round(playerHP));
 }
 
 function spawnEnemyOn(p){
-  enemies.push({ x: p.x + p.w/2, y: p.y - 46, w:30, h:46, alive:true, shootTimer: 60+Math.random()*90, aimDir:1, hitFlash:0, dying:0, dyingColorful:false, hp:2, staggerTimer:0, platX:p.x, platW:p.w, vx:(Math.random()<0.5?-1:1)*0.55, walkPhase:Math.random()*10 });
+  enemies.push({ x: p.x + p.w/2, y: p.y - 46, w:30, h:46, alive:true, shootTimer: 60+Math.random()*90, aimDir:1, hitFlash:0, dying:0, dyingColorful:false, hp:2, staggerTimer:0, platX:p.x, platW:p.w, vx:(Math.random()<0.5?-1:1)*0.55, walkPhase:Math.random()*10, idlePhase:Math.random()*10 });
 }
 
 function spawnCoinOn(p){
@@ -637,7 +679,7 @@ function spawnCoinOn(p){
 
 function startGame(){
   platforms = []; enemies = []; bullets = []; mapCoins = [];
-  playerHP = 3; invulnTimer = 0; deathReason = '';
+  playerHP = 100; hpRegenTimer = 0; invulnTimer = 0; deathReason = '';
   renderHP();
 
   WORLD_LEFT = 0;
@@ -648,11 +690,12 @@ function startGame(){
   platforms.push({x:0, y:0, w:130, h:22});
   genPlatforms(0, -4000);
 
-  player = { x:65, y:-70, w:56, h:70, vx:0, vy:0, onGround:true, facing:1, animTimer:0, animFrame:0, state:'stand', aimAngle:0, aimDX:-1, aimDY:0, shootCooldown:0, shootTimer:0, shootPose:'stand' };
+  player = { x:65, y:-70, w:56, h:70, vx:0, vy:0, onGround:true, facing:1, animTimer:0, animFrame:0, state:'stand', aimAngle:0, aimDX:-1, aimDY:0, shootCooldown:0, shootTimer:0, shootPose:'stand', prevY:-70 };
   cameraX = player.x + player.w/2 - innerWidth/2;
   cameraY = player.y - innerHeight*0.6;
   maxHeightReached = 0;
-  waterY = 260;
+  waterY = player.y + WATER_SAFE_GAP;
+  waterGap = WATER_SAFE_GAP;
   waterTimer = 0;
   gameOver = false;
   running = true;
@@ -675,6 +718,16 @@ function stickStart(e){
   originX = r.left + r.width/2; originY = r.top + r.height/2;
   stickMove(e);
 }
+function setNubOffset(dx, dy){
+  if (controlSide === 'right'){
+    stickNub.style.left = 'auto';
+    stickNub.style.right = (66-dx)+'px';
+  } else {
+    stickNub.style.right = 'auto';
+    stickNub.style.left = (66+dx)+'px';
+  }
+  stickNub.style.bottom = (66-dy)+'px';
+}
 function stickMove(e){
   if(!stickActive || e.pointerId !== activePointerId) return;
   let dx = e.clientX - originX, dy = e.clientY - originY;
@@ -682,7 +735,7 @@ function stickMove(e){
   const dist = Math.min(Math.hypot(dx,dy), max);
   const ang = Math.atan2(dy,dx);
   dx = Math.cos(ang)*dist; dy = Math.sin(ang)*dist;
-  stickNub.style.left = (66+dx)+'px'; stickNub.style.bottom = (66-dy)+'px';
+  setNubOffset(dx, dy);
   stickDX = dx/max; stickDY = dy/max;
   if (stickDY < -0.5) wantJump = true;
 }
@@ -690,7 +743,7 @@ function stickEnd(e){
   if (e.pointerId !== activePointerId) return;
   activePointerId = null;
   stickActive=false; stickDX=0; stickDY=0;
-  stickNub.style.left='66px'; stickNub.style.bottom='66px';
+  setNubOffset(0, 0);
 }
 stickZone.addEventListener('pointerdown', stickStart);
 stickZone.addEventListener('pointermove', stickMove);
@@ -746,7 +799,7 @@ function fireBullet(clientX, clientY){
     const ux = dx/dist, uy = dy/dist;
     for (const en of enemies){
       if (!en.alive || en.dying>0) continue;
-      const ex = en.x - originX2, ey = (en.y - en.h*0.5) - originY2;
+      const ex = en.x - originX2, ey = (en.y + en.h*0.5) - originY2;
       const along = ex*ux + ey*uy;
       if (along < 0 || along > range) continue;
       const perp = Math.abs(ex*uy - ey*ux);
@@ -808,11 +861,11 @@ function update(){
     }
   }
 
-  // camera: horizontal follows smoothly both ways, vertical only ever climbs (never comes back down)
+  // camera: follows the player smoothly on both axes (score/height tracked separately, unaffected by falling)
   const desiredCamX = player.x + player.w/2 - innerWidth/2;
   cameraX += (desiredCamX - cameraX) * 0.12;
   const desiredCamY = player.y - innerHeight*0.42;
-  if (desiredCamY < cameraY) cameraY = desiredCamY;
+  cameraY += (desiredCamY - cameraY) * 0.12;
 
   const heightM = Math.max(0, Math.round((-cameraY)/10));
   if (heightM > maxHeightReached) maxHeightReached = heightM;
@@ -823,7 +876,14 @@ function update(){
   if (minPY - cameraY > -4000) genPlatforms(minPY, minPY-2000);
   platforms = platforms.filter(p => p.y-cameraY < innerHeight+400);
 
-  waterY -= 0.55;
+  const yDelta = player.y - player.prevY; // negative = climbed upward this frame
+  if (yDelta >= 0){
+    waterGap = Math.max(0, waterGap - WATER_CREEP_PER_FRAME); // idle or falling: gap quietly shrinks
+  }
+  player.prevY = player.y;
+  const waterTargetY = player.y + waterGap;
+  waterY += (waterTargetY - waterY) * WATER_FOLLOW_SMOOTH; // ease toward target so the motion doesn't read as a hard follow
+
   if (player.y + player.h > waterY){
     waterTimer++;
     document.getElementById('warn-pill').style.display = 'block';
@@ -855,38 +915,51 @@ function update(){
       const half = en.w/2;
       if (en.x - half < en.platX){ en.x = en.platX+half; en.vx = Math.abs(en.vx); }
       if (en.x + half > en.platX+en.platW){ en.x = en.platX+en.platW-half; en.vx = -Math.abs(en.vx); }
-      en.walkPhase += Math.abs(en.vx)*2.2;
+      en.walkPhase += Math.abs(en.vx)*0.22;
       en.aimDir = en.vx >= 0 ? 1 : -1;
     }
+    en.idlePhase = (en.idlePhase||0) + 0.018;
 
     en.shootTimer--;
     if (en.shootTimer <= 0){
       en.shootTimer = 100 + Math.random()*80;
+      const enCenterY = en.y + en.h*0.5;
       const dx = (player.x+player.w/2) - en.x;
-      const dy = (player.y+player.h*0.5) - en.y;
+      const dy = (player.y+player.h*0.5) - enCenterY;
       const dist = Math.hypot(dx,dy) || 1;
       en.aimDir = dx >= 0 ? 1 : -1;
-      bullets.push({ x:en.x, y:en.y, vx:dx/dist*ENEMY_BULLET_SPEED, vy:dy/dist*ENEMY_BULLET_SPEED, owner:'enemy', life:200 });
+      bullets.push({ x:en.x, y:enCenterY, vx:dx/dist*ENEMY_BULLET_SPEED, vy:dy/dist*ENEMY_BULLET_SPEED, owner:'enemy', life:200 });
     }
   }
 
   if (invulnTimer > 0) invulnTimer--;
+
+  if (playerHP < 100){
+    hpRegenTimer++;
+    if (hpRegenTimer >= REGEN_INTERVAL[regenLevel]){
+      hpRegenTimer = 0;
+      playerHP = Math.min(100, playerHP + 1);
+      renderHP();
+    }
+  } else {
+    hpRegenTimer = 0;
+  }
 
   for (const b of bullets){
     if (b.life <= 0 || b.laser) continue;
     if (b.owner === 'player'){
       for (const en of enemies){
         if (!en.alive || en.dying>0) continue;
-        if (Math.abs(b.x - en.x) < en.w*0.6 && Math.abs(b.y - (en.y - en.h*0.5)) < en.h*0.6){
+        if (Math.abs(b.x - en.x) < en.w*0.6 && Math.abs(b.y - (en.y + en.h*0.5)) < en.h*0.6){
           b.life = 0;
-          const headY = en.y - en.h, feetY = en.y;
+          const headY = en.y, feetY = en.y + en.h;
           const zone = b.y < headY+16 ? 'head' : (b.y > feetY-14 ? 'leg' : 'body');
           damageEnemy(en, b.dmg||1, zone, b.weapon);
         }
       }
     } else if (b.owner === 'enemy'){
       if (invulnTimer<=0 && Math.abs(b.x-(player.x+player.w/2)) < player.w*0.5 && Math.abs(b.y-(player.y+player.h*0.5)) < player.h*0.5){
-        b.life = 0; playerHP--; invulnTimer = 60; renderHP(); sfxHitTaken();
+        b.life = 0; playerHP -= 34; invulnTimer = 60; renderHP(); sfxHitTaken();
         player.vy = -4;
         if (playerHP <= 0){ gameOver = true; deathReason = 'ELIMINATED'; saveGame(); }
       }
@@ -1007,7 +1080,7 @@ function drawEnemies(){
     if (!en.alive) continue;
     const ey = en.y - cameraY, cx = en.x - cameraX;
     if (ey < -80 || ey > innerHeight+80) continue;
-    const feetY = ey, headY = ey - en.h;
+    const feetY = ey + en.h, hipY = feetY - 22;
     const wobble = en.staggerTimer>0 ? Math.sin(en.staggerTimer*0.9)*6 : 0;
     let bodyColor = '#ffffff';
     if (en.dying > 0){
@@ -1018,28 +1091,35 @@ function drawEnemies(){
       bodyColor = '#f2a93b';
     }
     const outline = '#2c2c2e';
-    const legSwing = en.staggerTimer>0 ? 0 : Math.sin(en.walkPhase||0)*7;
+    const dir = (en.vx||0) !== 0 ? Math.sign(en.vx) : (en.facingDir||1);
+    en.facingDir = dir;
+    const stride = en.staggerTimer>0 ? 0 : 9;
+    const swing = en.staggerTimer>0 ? 0 : Math.sin(en.walkPhase||0);
+    const frontLegX = 4 + swing*stride, backLegX = -4 - swing*stride;
+    const idle = Math.sin(en.idlePhase||0);
+    const headX = 2 + idle*1.8;   // slow gentle look side to side
+    const headY = -30 + Math.abs(Math.sin((en.idlePhase||0)*0.5))*1;  // very slight bob, never a shake
 
     ctx.save();
-    ctx.translate(wobble, 0);
+    ctx.translate(cx+wobble, hipY);
+    ctx.scale(dir, 1); // local +x is always "forward" -- flips the whole figure to face travel direction
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
 
-    ctx.strokeStyle = outline; ctx.lineWidth = 5.5;
-    ctx.beginPath(); ctx.moveTo(cx, headY+34); ctx.lineTo(cx-9+legSwing, feetY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, headY+34); ctx.lineTo(cx+9-legSwing, feetY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, headY+14); ctx.lineTo(cx, headY+34); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, headY+18); ctx.lineTo(cx+9, headY+16); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, headY+18); ctx.lineTo(cx-9, headY+24); ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, headY+7, 8, 0, Math.PI*2); ctx.stroke();
+    function strokePass(color, w){
+      ctx.strokeStyle = color; ctx.lineWidth = w;
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(frontLegX,22); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(backLegX,22); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(2,-20); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2,-20); ctx.lineTo(headX,headY+6); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2,-20); ctx.lineTo(13,-23); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2,-20); ctx.lineTo(-7,-13); ctx.stroke();
+    }
+    strokePass(outline, 5.5);
+    strokePass(bodyColor, 3.5);
 
-    ctx.strokeStyle = bodyColor; ctx.lineWidth = 3.5;
-    ctx.beginPath(); ctx.moveTo(cx, headY+34); ctx.lineTo(cx-9+legSwing, feetY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, headY+34); ctx.lineTo(cx+9-legSwing, feetY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, headY+14); ctx.lineTo(cx, headY+34); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, headY+18); ctx.lineTo(cx+9, headY+16); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx, headY+18); ctx.lineTo(cx-9, headY+24); ctx.stroke();
-    ctx.fillStyle = bodyColor;
-    ctx.beginPath(); ctx.arc(cx, headY+7, 6.3, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = bodyColor; ctx.strokeStyle = outline; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(headX,headY,6.3,0,Math.PI*2); ctx.fill(); ctx.stroke();
+
     ctx.restore();
   }
 }
