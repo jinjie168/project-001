@@ -31,17 +31,17 @@
   #name-row { margin-top:18px; display:flex; align-items:center; gap:8px; background:#fff; border:2px solid #cfcfd4; border-radius:12px; padding:8px 14px; }
   #name-row input { background:transparent; border:none; outline:none; color:#3a3a40; font-size:14px; width:120px; }
   #name-row span { color:#8a8a92; font-size:13px; }
-  #start-bottom { position:absolute; bottom:20px; display:flex; gap:14px; }
-  .icon-btn { width:clamp(48px,12vw,74px); height:clamp(48px,12vw,74px); background:transparent; border:none; display:flex; align-items:center; justify-content:center; }
+  #start-bottom { position:absolute; bottom:20px; right:20px; display:flex; gap:14px; }
+  .icon-btn { width:clamp(64px,16vw,100px); height:clamp(64px,16vw,100px); background:transparent; border:none; display:flex; align-items:center; justify-content:center; }
   .icon-btn:active { transform:translateY(3px); }
-  .btn-icon { width:clamp(26px,7vw,42px); height:clamp(26px,7vw,42px); object-fit:contain; filter:drop-shadow(0 3px 3px rgba(0,0,0,0.35)); vertical-align:middle; }
+  .btn-icon { width:clamp(38px,10vw,60px); height:clamp(38px,10vw,60px); object-fit:contain; filter:drop-shadow(0 3px 3px rgba(0,0,0,0.35)); vertical-align:middle; }
 
   #hud { position:fixed; top:0; left:0; right:0; padding:14px 16px; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; z-index:5; }
   .pill { background:#fff; border:2px solid #9a9aa2; border-radius:20px; padding:8px 16px; color:#3a3a40; font-weight:bold; font-size:15px; }
   #height-pill { text-align:center; }
   #height-pill .label { font-size:10px; opacity:0.65; letter-spacing:1px; }
   #pause-btn { pointer-events:auto; width:clamp(42px,10vw,60px); height:clamp(42px,10vw,60px); border-radius:50%; background:linear-gradient(180deg,#8fd8ff,#4fb3f0); border:2px solid #1f85c7; color:#0a3a5c; font-size:16px; box-shadow:0 3px 0 #1f6e9e, 0 6px 12px rgba(31,110,158,0.35); display:flex; align-items:center; justify-content:center; }
-  #pause-btn .btn-icon { width:clamp(20px,5vw,30px); height:clamp(20px,5vw,30px); filter:drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
+  #pause-btn .btn-icon { width:clamp(28px,7vw,42px); height:clamp(28px,7vw,42px); filter:drop-shadow(0 2px 2px rgba(0,0,0,0.3)); }
   #pause-btn:active { transform:translateY(2px); box-shadow:0 1px 0 #c8c8ce; }
 
   #warn-pill { position:fixed; top:64px; left:50%; transform:translateX(-50%); background:#c0392b; color:#fff; padding:6px 16px; border-radius:12px; font-size:12px; font-weight:bold; z-index:5; display:none; }
@@ -56,9 +56,9 @@
   #hp-fill { height:100%; width:100%; background:linear-gradient(180deg,#e0645a,#c0392b); transition:width 0.2s ease; }
   #hp-num { font-weight:bold; font-size:13px; color:#3a3a40; min-width:26px; }
 
-  #pause-overlay { position:fixed; inset:0; background:rgba(30,30,34,0.9); z-index:40; display:none; flex-direction:row; flex-wrap:wrap; align-items:center; justify-content:center; gap:clamp(18px,6vw,36px); padding:20px; }
-  .pause-menu-icon { width:clamp(56px,15vw,86px); height:clamp(56px,15vw,86px); }
-  .pause-menu-icon .btn-icon { width:clamp(40px,11vw,64px); height:clamp(40px,11vw,64px); }
+  #pause-overlay { position:fixed; inset:0; background:rgba(30,30,34,0.9); z-index:40; display:none; flex-direction:row; flex-wrap:wrap; align-items:center; justify-content:center; row-gap:clamp(2px,1vw,8px); column-gap:clamp(16px,5vw,32px); padding:20px; }
+  .pause-menu-icon { width:clamp(64px,16vw,96px); height:clamp(64px,16vw,96px); }
+  .pause-menu-icon .btn-icon { width:clamp(48px,13vw,74px); height:clamp(48px,13vw,74px); }
   .pause-menu-icon:active { transform:translateY(3px) scale(0.95); }
 
   #shop-overlay { position:fixed; inset:0; background:#e9e9ec; z-index:50; display:none; flex-direction:column; align-items:center; padding:18px 16px; box-sizing:border-box; }
@@ -71,7 +71,7 @@
   .shop-section-label { width:100%; max-width:420px; color:#8a8a92; font-size:12px; font-weight:bold; letter-spacing:1px; margin:10px 2px 6px; }
   #shop-list { width:100%; max-width:420px; overflow-y:auto; flex:1; }
   .shop-row { display:flex; align-items:center; background:#fff; border:2px solid #cfcfd4; border-radius:14px; padding:10px 12px; margin-bottom:10px; gap:12px; }
-  .shop-row img { width:48px; height:48px; object-fit:contain; }
+  .shop-row img { width:clamp(48px,10vw,68px); height:clamp(48px,10vw,68px); object-fit:contain; }
   .shop-row-info { flex:1; }
   .shop-row-info .name { font-weight:bold; color:#3a3a40; font-size:15px; }
   .shop-row-info .desc { color:#9a9aa2; font-size:11px; margin-top:2px; }
@@ -86,7 +86,7 @@
   #settings-overlay { position:fixed; inset:0; background:#e9e9ec; z-index:50; display:none; flex-direction:column; align-items:center; padding:18px 16px; box-sizing:border-box; }
   .settings-row { width:100%; max-width:420px; display:flex; align-items:center; justify-content:space-between; background:#fff; border:2px solid #cfcfd4; border-radius:14px; padding:14px 16px; margin-bottom:12px; }
   .settings-row .label { font-weight:bold; color:#3a3a40; font-size:15px; display:flex; align-items:center; gap:10px; }
-  .settings-row .label .btn-icon { width:clamp(20px,5vw,28px); height:clamp(20px,5vw,28px); }
+  .settings-row .label .btn-icon { width:clamp(28px,7vw,38px); height:clamp(28px,7vw,38px); }
   .toggle-btn { width:56px; height:30px; border-radius:16px; border:2px solid #c8c8ce; background:#d5d5da; position:relative; box-shadow:inset 0 2px 4px rgba(0,0,0,0.15); }
   .toggle-btn.on { background:linear-gradient(180deg,#5fca7d,#3fae5c); border-color:#227a3c; }
   .toggle-btn .knob { position:absolute; top:2px; left:2px; width:22px; height:22px; border-radius:50%; background:#fff; transition:left 0.15s; box-shadow:0 2px 3px rgba(0,0,0,0.3); }
@@ -603,10 +603,9 @@ const MAX_GAP_Y = 135;
 const MIN_GAP_Y = 100;
 const BULLET_SPEED = 11;
 const ENEMY_BULLET_SPEED = 6;
-const WATER_SAFE_GAP = 340;       // world px behind the player when idle
-const WATER_CATCHUP_SECS = 16;    // seconds to fully close that gap if the player doesn't climb
-const WATER_CREEP_PER_FRAME = WATER_SAFE_GAP / (WATER_CATCHUP_SECS*60);
-const WATER_FOLLOW_SMOOTH = 0.03; // how gently water eases toward its target (lower = less noticeable)
+const WATER_SAFE_GAP = 340;       // world px the water trails behind your best (highest) height reached
+const WATER_CATCHUP_SECS = 10;    // seconds of no new progress before the water fully closes that gap
+const WATER_FOLLOW_SMOOTH = 0.05; // how gently water eases toward its target
 
 // ---------- World-space state ----------
 // Everything (player, platforms, enemies, bullets, water) lives in WORLD coordinates.
@@ -614,7 +613,7 @@ const WATER_FOLLOW_SMOOTH = 0.03; // how gently water eases toward its target (l
 let platforms = [], enemies = [], bullets = [], mapCoins = [];
 let lastPlatformX = 0;
 let player, cameraX = 0, cameraY = 0, maxHeightReached = 0;
-let waterY = 0, waterGap = 300, waterTimer = 0, gameOver = false, running = false;
+let waterY = 0, waterFrontierY = 0, waterStallTimer = 0, waterTimer = 0, gameOver = false, running = false;
 let playerHP = 100, hpRegenTimer = 0, invulnTimer = 0, deathReason = '';
 
 let driftDir = 1;
@@ -694,8 +693,9 @@ function startGame(){
   cameraX = player.x + player.w/2 - innerWidth/2;
   cameraY = player.y - innerHeight*0.6;
   maxHeightReached = 0;
+  waterFrontierY = player.y;
   waterY = player.y + WATER_SAFE_GAP;
-  waterGap = WATER_SAFE_GAP;
+  waterStallTimer = 0;
   waterTimer = 0;
   gameOver = false;
   running = true;
@@ -876,13 +876,19 @@ function update(){
   if (minPY - cameraY > -4000) genPlatforms(minPY, minPY-2000);
   platforms = platforms.filter(p => p.y-cameraY < innerHeight+400);
 
-  const yDelta = player.y - player.prevY; // negative = climbed upward this frame
-  if (yDelta >= 0){
-    waterGap = Math.max(0, waterGap - WATER_CREEP_PER_FRAME); // idle or falling: gap quietly shrinks
+  // water tracks your BEST height (frontier), not your current position, so falling never makes it recede.
+  // as long as you keep setting new height records the gap stays full ("quietly follows"); once you stop
+  // improving, the gap shrinks to 0 over WATER_CATCHUP_SECS of continuous stall.
+  if (player.y < waterFrontierY){
+    waterFrontierY = player.y;
+    waterStallTimer = 0;
+  } else {
+    waterStallTimer++;
   }
-  player.prevY = player.y;
-  const waterTargetY = player.y + waterGap;
-  waterY += (waterTargetY - waterY) * WATER_FOLLOW_SMOOTH; // ease toward target so the motion doesn't read as a hard follow
+  const stallFrac = Math.min(1, waterStallTimer / (WATER_CATCHUP_SECS*60));
+  const gapNow = WATER_SAFE_GAP * (1 - stallFrac);
+  const waterTargetY = waterFrontierY + gapNow;
+  waterY += (waterTargetY - waterY) * WATER_FOLLOW_SMOOTH;
 
   if (player.y + player.h > waterY){
     waterTimer++;
