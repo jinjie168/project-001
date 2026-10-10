@@ -381,13 +381,22 @@ const REGEN_COST = [150, 350];
 const REGEN_INTERVAL = [90, 60, 45]; // frames at ~60fps: 1.5s, 1s, 0.75s
 let bestHeight = 0;
 
+const THEMES = [
+  { id:'default', name:'Default Sky', price:0, owned:true },
+  { id:'starry',  name:'Starry Night', price:100, owned:false },
+  { id:'golden',  name:'Golden Hour',  price:100, owned:false },
+];
+function themeById(id){ return THEMES.find(t=>t.id===id); }
+let equippedTheme = 'default';
+
 // ---------- Save / Load ----------
 const SAVE_KEY = 'texxell_skyward_save';
 function saveGame(){
   try{
     const data = {
       coins, equippedWeapon, musicOn, sfxOn, controlSide, playerName, bestHeight, regenLevel,
-      weapons: WEAPONS.map(w=>({id:w.id, owned:w.owned, level:w.level}))
+      weapons: WEAPONS.map(w=>({id:w.id, owned:w.owned, level:w.level})),
+      themes: THEMES.map(t=>({id:t.id, owned:t.owned})), equippedTheme
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   }catch(e){}
@@ -405,6 +414,13 @@ function loadGame(){
     controlSide = data.controlSide || 'left';
     playerName = data.playerName || 'Player';
     bestHeight = data.bestHeight || 0;
+    if (data.themes){
+      data.themes.forEach(st=>{
+        const t = themeById(st.id);
+        if (t){ t.owned = st.owned; }
+      });
+    }
+    equippedTheme = data.equippedTheme || 'default';
     if (data.weapons){
       data.weapons.forEach(sw=>{
         const w = weaponById(sw.id);
@@ -553,6 +569,49 @@ function renderShop(){
   }
   regenRow.appendChild(regenIcon); regenRow.appendChild(regenInfo); regenRow.appendChild(regenBtnWrap);
   list.appendChild(regenRow);
+
+  const sceneLabel = document.createElement('div');
+  sceneLabel.className = 'shop-section-label';
+  sceneLabel.textContent = 'SCENES';
+  list.appendChild(sceneLabel);
+
+  THEMES.forEach(t=>{
+    const row = document.createElement('div');
+    row.className = 'shop-row' + (equippedTheme===t.id ? ' equipped-row' : '');
+    const swatch = document.createElement('div');
+    swatch.style.width = '48px'; swatch.style.height = '48px'; swatch.style.borderRadius = '10px';
+    swatch.style.border = '2px solid #c8c8ce';
+    if (t.id==='starry') swatch.style.background = 'linear-gradient(180deg,#0d0820,#2e1f5c)';
+    else if (t.id==='golden') swatch.style.background = 'linear-gradient(180deg,#fff3d6,#ffd88a)';
+    else swatch.style.background = '#e9e9ec';
+    const info = document.createElement('div');
+    info.className = 'shop-row-info';
+    info.innerHTML = '<div class="name">'+t.name+'</div><div class="desc">Background scene</div>';
+    const btnWrap = document.createElement('div');
+    btnWrap.style.display = 'flex'; btnWrap.style.flexDirection = 'column'; btnWrap.style.gap = '6px';
+    if (!t.owned){
+      const buyBtn = document.createElement('button');
+      buyBtn.className = 'shop-row-btn buy' + (coins<t.price ? ' disabled' : '');
+      buyBtn.textContent = '$'+t.price;
+      buyBtn.onclick = ()=>{
+        if (coins < t.price) return;
+        coins -= t.price; t.owned = true; equippedTheme = t.id;
+        updateCoinDisplays(); renderShop(); saveGame();
+      };
+      btnWrap.appendChild(buyBtn);
+    } else {
+      const eqBtn = document.createElement('button');
+      if (equippedTheme===t.id){
+        eqBtn.className = 'shop-row-btn equipped'; eqBtn.textContent = 'EQUIPPED';
+      } else {
+        eqBtn.className = 'shop-row-btn equip'; eqBtn.textContent = 'EQUIP';
+        eqBtn.onclick = ()=>{ equippedTheme = t.id; renderShop(); saveGame(); };
+      }
+      btnWrap.appendChild(eqBtn);
+    }
+    row.appendChild(swatch); row.appendChild(info); row.appendChild(btnWrap);
+    list.appendChild(row);
+  });
 }
 
 let shopReturnScreen = 'start-screen';
@@ -1213,13 +1272,57 @@ function currentSpriteKey(){
 }
 
 // ---------- Draw (all world -> screen via camera subtraction) ----------
+function pseudoRandom(x,y){
+  const n = Math.sin(x*127.1 + y*311.7) * 43758.5453;
+  return n - Math.floor(n);
+}
+function drawStars(){
+  const cellSize = 70;
+  const offsetX = ((-cameraX)%cellSize+cellSize)%cellSize;
+  const offsetY = ((-cameraY)%cellSize+cellSize)%cellSize;
+  const now = performance.now();
+  for (let gx=-cellSize; gx<innerWidth+cellSize; gx+=cellSize){
+    for (let gy=-cellSize; gy<innerHeight+cellSize; gy+=cellSize){
+      const cellX = Math.round((gx-offsetX+cameraX)/cellSize);
+      const cellY = Math.round((gy-offsetY+cameraY)/cellSize);
+      const r = pseudoRandom(cellX,cellY);
+      if (r < 0.35){
+        const sx = gx+offsetX + pseudoRandom(cellX+0.5,cellY)*cellSize*0.7;
+        const sy = gy+offsetY + pseudoRandom(cellX,cellY+0.5)*cellSize*0.7;
+        const twinkle = 0.35 + 0.65*Math.abs(Math.sin(now*0.0018 + cellX*13 + cellY*7));
+        ctx.fillStyle = 'rgba(255,255,255,'+twinkle+')';
+        const size = 1 + pseudoRandom(cellX,cellY)*1.8;
+        ctx.beginPath(); ctx.arc(sx,sy,size,0,Math.PI*2); ctx.fill();
+      }
+    }
+  }
+}
 function drawBackground(){
-  ctx.fillStyle = '#e9e9ec';
-  ctx.fillRect(0,0,innerWidth,innerHeight);
-  ctx.save(); ctx.globalAlpha=0.5; ctx.strokeStyle='#cfcfd4'; ctx.lineWidth=1;
   const gs=60;
   const oy=((-cameraY)%gs+gs)%gs;
   const ox=((-cameraX)%gs+gs)%gs;
+
+  if (equippedTheme === 'starry'){
+    const g = ctx.createLinearGradient(0,0,0,innerHeight);
+    g.addColorStop(0,'#0d0820'); g.addColorStop(1,'#2e1f5c');
+    ctx.fillStyle = g; ctx.fillRect(0,0,innerWidth,innerHeight);
+    drawStars();
+    return;
+  }
+  if (equippedTheme === 'golden'){
+    const g = ctx.createLinearGradient(0,0,0,innerHeight);
+    g.addColorStop(0,'#fff3d6'); g.addColorStop(1,'#ffd88a');
+    ctx.fillStyle = g; ctx.fillRect(0,0,innerWidth,innerHeight);
+    ctx.save(); ctx.globalAlpha=0.4; ctx.strokeStyle='#e8c877'; ctx.lineWidth=1;
+    for(let y=oy-gs;y<innerHeight;y+=gs){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(innerWidth,y); ctx.stroke(); }
+    for(let x=ox-gs;x<innerWidth;x+=gs){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,innerHeight); ctx.stroke(); }
+    ctx.restore();
+    return;
+  }
+
+  ctx.fillStyle = '#e9e9ec';
+  ctx.fillRect(0,0,innerWidth,innerHeight);
+  ctx.save(); ctx.globalAlpha=0.5; ctx.strokeStyle='#cfcfd4'; ctx.lineWidth=1;
   for(let y=oy-gs;y<innerHeight;y+=gs){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(innerWidth,y); ctx.stroke(); }
   for(let x=ox-gs;x<innerWidth;x+=gs){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,innerHeight); ctx.stroke(); }
   ctx.restore();
