@@ -151,6 +151,7 @@
   .pill-icon-btn { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 6px; border-radius:16px; background:linear-gradient(180deg,#ffffff,#f0f0f3); border:2px solid #c8c8ce; box-shadow:0 3px 0 #c8c8ce; font-size:11px; font-weight:800; letter-spacing:0.5px; color:#3a3a40; }
   .pill-icon-btn:active { transform:translateY(2px); box-shadow:0 1px 0 #c8c8ce; }
   .pill-icon-btn .btn-icon { width:clamp(28px,7vw,38px); height:clamp(28px,7vw,38px); }
+  #hud, #joystick-zone { transform: translateZ(0); }
 </style>
 </head>
 <body>
@@ -335,15 +336,31 @@ const FOOT_FRAC = {
 
 let WORLD_LEFT = 0;
 let WORLD_RIGHT = 480;
+let dprCap = 1.5, lastShownHeight = -1, perfLast = 0, perfAcc = 0, perfN = 0, warnState = '';
+function perfTick(){
+  const now = performance.now();
+  if (perfLast){
+    const dt = now - perfLast;
+    if (dt < 120){ perfAcc += dt; perfN++; }
+    if (perfN >= 90){
+      if (perfAcc/perfN > 26 && dprCap > 1){ dprCap = 1; resize(); }
+      perfAcc = 0; perfN = 0;
+    }
+  }
+  perfLast = now;
+}
+function setWarn(s){
+  if (s !== warnState){ warnState = s; document.getElementById('warn-pill').style.display = s; }
+}
 
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', {alpha:false});
 function resize(){
   const w = (window.visualViewport ? window.visualViewport.width : innerWidth);
   const h = (window.visualViewport ? window.visualViewport.height : innerHeight);
-  canvas.width = w*devicePixelRatio; canvas.height = h*devicePixelRatio;
+  const dpr = Math.min(devicePixelRatio||1, dprCap); canvas.width = Math.round(w*dpr); canvas.height = Math.round(h*dpr);
   canvas.style.width = w+'px'; canvas.style.height = h+'px';
-  ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
   WORLD_RIGHT = Math.max(WORLD_RIGHT, w*1.05);
 }
 resize();
@@ -757,6 +774,58 @@ let waterY = 0, waterFrontierY = 0, waterStallTimer = 0, waterTimer = 0, gameOve
 let playerHP = 100, hpRegenTimer = 0, invulnTimer = 0, deathReason = '', hasUsedContinue = false;
 
 let driftDir = 1;
+let lastEnemyY = 0, enemyGlobalCooldown = 0;
+const ENEMY_MIN_GAP = 320;
+
+function enemyGunGeom(en){
+  const tx = player.x + player.w/2, ty = player.y + player.h*0.5;
+  const dir = tx >= en.x ? 1 : -1;
+  const hipWY = en.y + en.h - 26;
+  const hx = en.x + dir*15, hy = hipWY - 30;
+  const lx = (tx - hx)*dir, ly = ty - hy;
+  const a = Math.max(-1.3, Math.min(1.3, Math.atan2(ly, Math.max(lx, 1))));
+  const L = 18;
+  const mx = en.x + dir*(15 + L*Math.cos(a));
+  const my = hy + L*Math.sin(a);
+  return { dir, a, mx, my, tx, ty };
+}
+
+let fallingCoin = null, fallingCoinDelay = 90;
+function updateFallingCoin(){
+  if (!fallingCoin){
+    fallingCoinDelay--;
+    if (fallingCoinDelay <= 0){
+      const minX = Math.max(WORLD_LEFT+20, cameraX+30);
+      const maxX = Math.min(WORLD_RIGHT-20, cameraX+innerWidth-30);
+      const x = minX + Math.random()*Math.max(1, maxX-minX);
+      fallingCoin = { x, y: cameraY-30, vy: 3, t: Math.random()*10, r: 9 };
+    }
+    return;
+  }
+  const c = fallingCoin;
+  c.y += c.vy; c.t += 0.08; c.x += Math.sin(c.t)*0.6;
+  const dx = (player.x+player.w/2) - c.x, dy = (player.y+player.h*0.5) - c.y;
+  if (Math.abs(dx) < player.w*0.5 + c.r && Math.abs(dy) < player.h*0.5 + c.r){
+    coins += 1; updateCoinDisplays(); sfxCoin(); saveGame();
+    fallingCoin = null; fallingCoinDelay = 120 + Math.random()*180;
+    return;
+  }
+  if (c.y - cameraY > innerHeight + 60){
+    fallingCoin = null; fallingCoinDelay = 60 + Math.random()*120;
+  }
+}
+function drawFallingCoin(){
+  if (!fallingCoin) return;
+  const c = fallingCoin, sx = c.x-cameraX, sy = c.y-cameraY;
+  const img = sprites.icon_coin;
+  const d = 9*2.4;
+  if (img && img.complete && img.naturalWidth>0){
+    ctx.drawImage(img, sx-d/2, sy-d/2, d, d);
+  } else {
+    ctx.fillStyle = '#f2c14e';
+    ctx.beginPath(); ctx.arc(sx, sy, d/2, 0, Math.PI*2); ctx.fill();
+  }
+}
 function genPlatforms(fromY, toY){
   let y = fromY;
   while (y > toY){
@@ -774,7 +843,8 @@ function genPlatforms(fromY, toY){
     lastPlatformX = x;
     if (Math.random() < 0.04 && y < -150){
       spawnChestOn({x, y, w});
-    } else if (Math.random() < 0.38 && y < -100){
+    } else if (Math.random() < 0.5 && y < -100 && (lastEnemyY - y) >= ENEMY_MIN_GAP){
+      lastEnemyY = y;
       spawnEnemyOn({x, y, w});
     } else if (Math.random() < 0.3 && y < -100){
       spawnCoinOn({x, y, w});
@@ -902,7 +972,7 @@ document.getElementById('gplayagain-btn').addEventListener('click', ()=>{
 });
 
 function startGame(){
-  platforms = []; enemies = []; bullets = []; mapCoins = []; mapChests = []; flyingHeads = [];
+  platforms = []; enemies = []; bullets = []; mapCoins = []; mapChests = []; flyingHeads = []; lastEnemyY = 0; enemyGlobalCooldown = 0; fallingCoin = null; fallingCoinDelay = 90;
   playerHP = 100; hpRegenTimer = 0; invulnTimer = 0; deathReason = ''; hasUsedContinue = false;
   renderHP();
 
@@ -1012,7 +1082,7 @@ function damageEnemy(en, dmg, hitZone, weaponId){
   en.hp -= dmg;
   en.flashTorso = 12;
   if (en.hp <= 0){ en.knockdown = 40; en.knockdownMax = 40; en.pendingDeath = true; }
-  else if (Math.random() < 0.3){ en.knockdown = 55; en.knockdownMax = 55; }
+  else if (Math.random() < 0.3){ en.knockdown = 100000; en.knockdownMax = 100000; }
 }
 
 function fireBullet(clientX, clientY){
@@ -1112,9 +1182,9 @@ function update(){
   const heightM = Math.max(0, Math.round((-cameraY)/10));
   if (heightM > maxHeightReached) maxHeightReached = heightM;
   if (maxHeightReached > bestHeight){ bestHeight = maxHeightReached; }
-  document.getElementById('height-val').textContent = maxHeightReached+'m';
+  if (maxHeightReached !== lastShownHeight){ lastShownHeight = maxHeightReached; document.getElementById('height-val').textContent = maxHeightReached+'m'; }
 
-  const minPY = Math.min(...platforms.map(p=>p.y));
+  let minPY = Infinity; for (const p of platforms) if (p.y < minPY) minPY = p.y;
   if (minPY - cameraY > -4000) genPlatforms(minPY, minPY-2000);
   platforms = platforms.filter(p => p.y-cameraY < innerHeight+400);
 
@@ -1134,11 +1204,11 @@ function update(){
 
   if (player.y + player.h > waterY){
     waterTimer++;
-    document.getElementById('warn-pill').style.display = 'block';
+    setWarn('block');
     if (waterTimer > 180){ gameOver = true; running = false; deathReason = 'DROWNED'; saveGame(); announceDeath(); }
   } else {
     waterTimer = 0;
-    document.getElementById('warn-pill').style.display = 'none';
+    setWarn('none');
   }
 
   player.animTimer++;
@@ -1158,6 +1228,7 @@ function update(){
     if (en.flashTorso > 0) en.flashTorso--;
     if (en.flashLegs > 0) en.flashLegs--;
     if (en.knockdown > 0){
+      en.fell = true; en.fallT = (en.fallT||0) + 1;
       en.knockdown--;
       if (en.knockdown <= 0 && en.pendingDeath){
         en.pendingDeath = false;
@@ -1183,18 +1254,21 @@ function update(){
     en.idlePhase = (en.idlePhase||0) + 0.018;
 
     en.shootTimer--;
-    if (en.shootTimer <= 0){
-      en.shootTimer = 100 + Math.random()*80;
-      const enCenterY = en.y + en.h*0.5;
-      const dx = (player.x+player.w/2) - en.x;
-      const dy = (player.y+player.h*0.5) - enCenterY;
+    if (en.shootTimer <= 0 && enemyGlobalCooldown > 0){ en.shootTimer = 15 + Math.random()*20; }
+    else if (en.shootTimer <= 0){
+      enemyGlobalCooldown = 75;
+      en.shootTimer = 110 + Math.random()*90;
+      const g = enemyGunGeom(en);
+      const dx = g.tx - g.mx, dy = g.ty - g.my;
       const dist = Math.hypot(dx,dy) || 1;
-      en.aimDir = dx >= 0 ? 1 : -1;
-      bullets.push({ x:en.x, y:enCenterY, vx:dx/dist*ENEMY_BULLET_SPEED, vy:dy/dist*ENEMY_BULLET_SPEED, owner:'enemy', life:200 });
+      en.aimDir = g.dir;
+      bullets.push({ x:g.mx, y:g.my, vx:dx/dist*ENEMY_BULLET_SPEED, vy:dy/dist*ENEMY_BULLET_SPEED, owner:'enemy', life:200 });
     }
   }
 
   if (invulnTimer > 0) invulnTimer--;
+  if (enemyGlobalCooldown > 0) enemyGlobalCooldown--;
+  updateFallingCoin();
 
   if (playerHP < 100){
     hpRegenTimer++;
@@ -1314,8 +1388,8 @@ function drawBackground(){
     g.addColorStop(0,'#fff3d6'); g.addColorStop(1,'#ffd88a');
     ctx.fillStyle = g; ctx.fillRect(0,0,innerWidth,innerHeight);
     ctx.save(); ctx.globalAlpha=0.4; ctx.strokeStyle='#e8c877'; ctx.lineWidth=1;
-    for(let y=oy-gs;y<innerHeight;y+=gs){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(innerWidth,y); ctx.stroke(); }
-    for(let x=ox-gs;x<innerWidth;x+=gs){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,innerHeight); ctx.stroke(); }
+    ctx.beginPath(); for(let y=oy-gs;y<innerHeight;y+=gs){ ctx.moveTo(0,y); ctx.lineTo(innerWidth,y); } ctx.stroke();
+    ctx.beginPath(); for(let x=ox-gs;x<innerWidth;x+=gs){ ctx.moveTo(x,0); ctx.lineTo(x,innerHeight); } ctx.stroke();
     ctx.restore();
     return;
   }
@@ -1323,8 +1397,8 @@ function drawBackground(){
   ctx.fillStyle = '#e9e9ec';
   ctx.fillRect(0,0,innerWidth,innerHeight);
   ctx.save(); ctx.globalAlpha=0.5; ctx.strokeStyle='#cfcfd4'; ctx.lineWidth=1;
-  for(let y=oy-gs;y<innerHeight;y+=gs){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(innerWidth,y); ctx.stroke(); }
-  for(let x=ox-gs;x<innerWidth;x+=gs){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,innerHeight); ctx.stroke(); }
+  ctx.beginPath(); for(let y=oy-gs;y<innerHeight;y+=gs){ ctx.moveTo(0,y); ctx.lineTo(innerWidth,y); } ctx.stroke();
+  ctx.beginPath(); for(let x=ox-gs;x<innerWidth;x+=gs){ ctx.moveTo(x,0); ctx.lineTo(x,innerHeight); } ctx.stroke();
   ctx.restore();
 }
 
@@ -1401,7 +1475,7 @@ function drawEnemies(){
       if (en.flashLegs > 0) legColor = '#e0453f';
     }
     const outline = 'rgba(60,60,66,0.18)';
-    const dir = (en.vx||0) !== 0 ? Math.sign(en.vx) : (en.facingDir||1);
+    const dir = (en.dying>0 || en.knockdown>0 || !player) ? (en.facingDir||1) : enemyGunGeom(en).dir;
     en.facingDir = dir;
     const grounded = en.staggerTimer<=0 && en.knockdown<=0;
     const stride = grounded ? 8 : 0;
@@ -1425,14 +1499,11 @@ function drawEnemies(){
     }
 
     let angle = 0, groundLift = 0;
-    if (en.knockdown > 0){
-      const maxAngle = 1.4, fallFrames = 12, riseFrames = 12;
-      const elapsed = en.knockdownMax - en.knockdown;
+    if (en.knockdown > 0 || (en.dying > 0 && en.fell)){
+      const maxAngle = 1.4, fallFrames = 12;
+      const elapsed = en.fallT || 0;
       if (elapsed < fallFrames){
         const t = elapsed/fallFrames;
-        angle = Math.sin(t*Math.PI/2)*maxAngle;
-      } else if (en.knockdown < riseFrames){
-        const t = en.knockdown/riseFrames;
         angle = Math.sin(t*Math.PI/2)*maxAngle;
       } else {
         angle = maxAngle;
@@ -1480,6 +1551,14 @@ function drawEnemies(){
     const handX = armRaise ? 17 : 15, handY = armRaise ? -42 : -30;
     seg(2,-24, elbowX,elbowY, torsoColor, 6.5);
     seg(elbowX,elbowY, handX,handY, torsoColor, 5.5);
+    const gunImg = sprites.pistol;
+    if (gunImg && gunImg.complete && gunImg.naturalWidth > 0){
+      const gw = 22, gh = gw * gunImg.naturalHeight / gunImg.naturalWidth;
+      const aimA = (en.knockdown>0 || en.dying>0 || !player) ? 0 : enemyGunGeom(en).a;
+      ctx.save(); ctx.translate(handX, handY); ctx.rotate(aimA);
+      ctx.drawImage(gunImg, -gw*0.2, -gh/2, gw, gh);
+      ctx.restore();
+    }
     seg(2,-24, -6,-18, torsoColor, 6.5);
     seg(-6,-18, -9,-13, torsoColor, 5.5);
 
@@ -1613,9 +1692,10 @@ function drawPlayer(){
 }
 
 function loop(gen){
+  perfTick();
   if (!running || gen !== loopGen) return; // a newer loop chain has taken over -- stop this stale one
   if (!gameOver){ update(); }
-  drawBackground(); drawPlatforms(); drawMapCoins(); drawMapChests(); drawWater(); drawEnemies(); drawBullets(); drawPlayer();
+  drawBackground(); drawPlatforms(); drawMapCoins(); drawMapChests(); drawFallingCoin(); drawPlayer(); drawWater(); drawEnemies(); drawBullets();
   requestAnimationFrame(()=>loop(gen));
 }
 </script>
